@@ -1,0 +1,65 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Segoe UI', Arial, sans-serif; background: #f4f7fc; color: #132540; }
+
+.layout { display: grid; grid-template-columns: 250px 1fr; min-height: 100vh; }
+aside { background: linear-gradient(180deg, #0b2c74, #0f4fb8); color: #fff; padding: 18px; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
+.logo-box { background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.14); border-radius: 16px; padding: 14px; text-align: center; margin-bottom: 20px; }
+.logo-box h2 { font-size: 22px; margin-bottom: 4px; }
+.logo-box p { font-size: 12px; opacity: .85; }
+.nav { display: flex; flex-direction: column; gap: 6px; }
+.nav button { color: #e9f0ff; background: rgba(255,255,255,.05); border: 0; padding: 12px 14px; border-radius: 10px; font-size: 14px; cursor: pointer; text-align: left; }
+.nav button:hover, .nav button.active { background: rgba(255,255,255,.16); }
+.logout-btn { margin-top: 20px; background: rgba(255,255,255,.1); }
+
+main { padding: 22px 26px; }
+.hero { background: #fff; border: 1px solid #dce4f2; border-radius: 18px; padding: 20px 24px; margin-bottom: 20px; box-shadow: 0 6px 20px rgba(15,79,184,.08); }
+.hero h1 { font-size: 26px; color: #0b2c74; margin-bottom: 4px; }
+.hero p { color: #6a7a92; font-size: 13px; }
+
+.grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 20px; }
+.card { background: #fff; border: 1px solid #dce4f2; border-radius: 16px; padding: 16px; box-shadow: 0 4px 14px rgba(15,40,90,.05); }
+.card .label { font-size: 12px; color: #6a7a92; }
+.card .value { font-size: 28px; font-weight: 800; color: #0b2c74; margin-top: 6px; }
+
+h2.section-title { color: #0b2c74; font-size: 22px; margin: 20px 0 12px; }
+
+.form-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 12px; }
+.form-grid.three { grid-template-columns: repeat(3, 1fr); }
+input, select, textarea { width: 100%; padding: 11px 12px; border: 1px solid #dce4f2; border-radius: 10px; background: #fff; font-size: 13px; font-family: inherit; }
+button.primary { border: 0; border-radius: 10px; padding: 11px 18px; background: #0f4fb8; color: #fff; font-weight: 700; cursor: pointer; font-size: 14px; }
+button.primary:hover { background: #0b2c74; }
+button.danger { background: #c53434; }
+
+.table-wrap { max-height: 500px; overflow: auto; border: 1px solid #dce4f2; border-radius: 14px; background: #fff; }
+table { width: 100%; border-collapse: collapse; }
+th, td { padding: 10px 8px; border-bottom: 1px solid #dce4f2; text-align: left; font-size: 13px; white-space: nowrap; }
+th { background: #f5f9ff; color: #6a7a92; position: sticky; top: 0; font-weight: 600; }
+
+.pill { display: inline-block; padding: 3px 9px; border-radius: 999px; font-size: 11px; font-weight: 700; }
+.pill.shlog { background: #fff3d0; color: #8a5a00; border: 1px solid #f2c96b; }
+.pill.client { background: #e2ecff; color: #204a99; border: 1px solid #b7cbf5; }
+.pill.ok { background: #e6f7ed; color: #1d9659; }
+.pill.warn { background: #fff4df; color: #c77b12; }
+.pill.bad { background: #fde8e8; color: #c53434; }
+.pill.info { background: #eaf2ff; color: #1f66d1; }
+
+.filter-bar { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+.filter-bar input, .filter-bar select { max-width: 250px; }
+
+.login-container { display: flex; align-items: center; justify-content: center; min-height: 100vh; background: linear-gradient(135deg, #0b2c74, #0f4fb8); }
+.login-box { background: #fff; padding: 40px; border-radius: 20px; box-shadow: 0 20px 60px rgba(0,0,0,.2); width: 100%; max-width: 400px; }
+.login-box h1 { color: #0b2c74; margin-bottom: 8px; font-size: 26px; text-align: center; }
+.login-box p { color: #6a7a92; text-align: center; margin-bottom: 24px; font-size: 13px; }
+.login-box .form-field { margin-bottom: 14px; }
+.login-box button { width: 100%; margin-top: 8px; }
+.login-box .error { color: #c53434; font-size: 13px; margin-top: 10px; text-align: center; }
+.login-box .success { color: #1d9659; font-size: 13px; margin-top: 10px; text-align: center; }
+.login-toggle { text-align: center; margin-top: 14px; font-size: 13px; color: #0f4fb8; cursor: pointer; text-decoration: underline; }
+
+.loading { text-align: center; padding: 40px; color: #6a7a92; }
+
+@media (max-width: 1100px) {
+  .layout { grid-template-columns: 1fr; }
+  aside { position: relative; height: auto; }
+  .grid, .form-grid, .form-grid.three { grid-template-columns: 1fr; }
+}
