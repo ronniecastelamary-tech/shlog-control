@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from './supabase.js'
 
+const STORAGE_BUCKET = 'documentos-pdf'
 const FORNECEDORES_PADRAO = ['Trucks Control', '3S', 'T4S', 'Autolife', 'Integrard']
 const TRUCKS_ITEMS = [
   'Sirene',
@@ -15,7 +16,7 @@ const TRUCKS_ITEMS = [
 const TIPOS_DOCUMENTO = ['Apólice', 'DDR', 'Declaração', 'PGR', 'Proposta', 'Complementar']
 const CLASSIFICACOES = ['Principal', 'Complementar']
 const TIPOS_SEGURO = ['SHLOG', 'Cliente']
-const ORIGENS = ['Manual', 'PDF']
+const ORIGENS = ['Manual', 'PDF', 'Importação']
 const STATUS_TECNOLOGIA = ['Ativo', 'Preventiva', 'Corretiva', 'Instalação', 'Substituição', 'Removido']
 
 const emptyVehicle = {
@@ -57,7 +58,7 @@ const emptyTech = {
 function daysUntil(dateStr) {
   if (!dateStr) return null
   const today = new Date()
-  const target = new Date(dateStr + 'T00:00:00')
+  const target = new Date(`${dateStr}T00:00:00`)
   return Math.ceil((target - today) / 86400000)
 }
 
@@ -81,6 +82,88 @@ function alertClass(days) {
   return 'pill success'
 }
 
+function normalizeBool(value) {
+  const v = String(value ?? '').trim().toLowerCase()
+  return ['1', 'sim', 'true', 's', 'yes', 'y', 'x'].includes(v)
+}
+
+function parseCsv(text) {
+  const rows = []
+  let row = []
+  let cell = ''
+  let inQuotes = false
+
+  for (let i = 0; i < text.length; i += 1) {
+    const char = text[i]
+    const next = text[i + 1]
+
+    if (char === '"') {
+      if (inQuotes && next === '"') {
+        cell += '"'
+        i += 1
+      } else {
+        inQuotes = !inQuotes
+      }
+      continue
+    }
+
+    if (char === ',' && !inQuotes) {
+      row.push(cell)
+      cell = ''
+      continue
+    }
+
+    if ((char === '\n' || char === '\r') && !inQuotes) {
+      if (char === '\r' && next === '\n') i += 1
+      row.push(cell)
+      if (row.some(col => String(col).trim() !== '')) rows.push(row)
+      row = []
+      cell = ''
+      continue
+    }
+
+    cell += char
+  }
+
+  if (cell.length > 0 || row.length > 0) {
+    row.push(cell)
+    if (row.some(col => String(col).trim() !== '')) rows.push(row)
+  }
+
+  if (!rows.length) return []
+  const headers = rows[0].map(h => String(h).trim())
+  return rows.slice(1).map(cols => {
+    const obj = {}
+    headers.forEach((header, idx) => {
+      obj[header] = cols[idx] ?? ''
+    })
+    return obj
+  })
+}
+
+async function readTextFile(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result || ''))
+    reader.onerror = reject
+    reader.readAsText(file, 'utf-8')
+  })
+}
+
+async function uploadPdfToSupabase(file) {
+  const ext = file.name.split('.').pop() || 'pdf'
+  const filePath = `documentos/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
+
+  const { error: uploadError } = await supabase.storage
+    .from(STORAGE_BUCKET)
+    .upload(filePath, file, { upsert: false, contentType: file.type || 'application/pdf' })
+
+  if (uploadError) throw uploadError
+
+  const { data } = supabase.storage.from(STORAGE_BUCKET).getPublicUrl(filePath)
+  return data.publicUrl
+}
+
 export default function App() {
   const [session, setSession] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -91,8 +174,8 @@ export default function App() {
       setLoading(false)
     })
 
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session)
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, currentSession) => {
+      setSession(currentSession)
       setLoading(false)
     })
 
@@ -274,11 +357,11 @@ function DashboardPage({ vehicles, documents, tecnologias }) {
         <div className="card">
           <div className="card-title">Regras aplicadas</div>
           <ul className="bullet-list">
-            <li>Apólices e DDRs em módulo separado de Tecnologias.</li>
+            <li>Importação e cadastro manual de veículos.</li>
+            <li>Importação, cadastro manual e PDF para Apólices e DDRs.</li>
             <li>Campos principais de documentos: vigência, LMG e flag SHLOG/Cliente.</li>
             <li>Tecnologias controlam manutenção por veículo e fornecedor.</li>
             <li>Fornecedor Trucks Control libera itens específicos.</li>
-            <li>Alerta visual para vencimentos em 60, 30, 15 e 7 dias.</li>
           </ul>
         </div>
       </div>
@@ -300,6 +383,7 @@ function VehiclesPage({ vehicles, reload }) {
   const [editingId, setEditingId] = useState(null)
   const [busca, setBusca] = useState('')
   const [msg, setMsg] = useState({ text: '', type: '' })
+  const [importing, setImporting] = useState(false)
 
   const filtrados = useMemo(() => vehicles.filter(v =>
     [v.placa, v.tipo, v.marca, v.modelo, v.ano, v.status].some(val => String(val || '').toLowerCase().includes(busca.toLowerCase()))
@@ -357,10 +441,46 @@ function VehiclesPage({ vehicles, reload }) {
     reload()
   }
 
+  async function handleImport(file) {
+    if (!file) return
+    setImporting(true)
+    setMsg({ text: '', type: '' })
+
+    try {
+      const text = await readTextFile(file)
+      const rows = parseCsv(text)
+      const payload = rows.map(r => ({
+        placa: String(r.placa || r.PLACA || '').trim().toUpperCase(),
+        tipo: String(r.tipo || r['TIPO VEÍCULO'] || r.tipo_veiculo || '').trim().toUpperCase(),
+        marca: String(r.marca || r.MARCA || '').trim(),
+        modelo: String(r.modelo || r.MODELO || '').trim(),
+        ano: String(r.ano || r.ANO || '').trim(),
+        bau_cofre: normalizeBool(r.bau_cofre ?? r.BAU_COFRE),
+        status: String(r.status || r.STATUS || 'Ativo').trim()
+      })).filter(v => v.placa)
+
+      if (!payload.length) throw new Error('Nenhum registro válido encontrado no CSV de veículos.')
+      const { error } = await supabase.from('veiculos').upsert(payload, { onConflict: 'placa' })
+      if (error) throw error
+      setMsg({ text: `${payload.length} veículos importados/atualizados.`, type: 'success' })
+      reload()
+    } catch (error) {
+      setMsg({ text: error.message || 'Falha ao importar veículos.', type: 'error' })
+    } finally {
+      setImporting(false)
+    }
+  }
+
   return (
     <>
       <h2 className="section-title">Veículos</h2>
       {msg.text && <div className={msg.type}>{msg.text}</div>}
+
+      <div className="card">
+        <div className="card-title">Importação de veículos</div>
+        <p className="helper">CSV com colunas: placa, tipo, marca, modelo, ano, bau_cofre, status. Também aceita cabeçalhos em maiúsculo, como PLACA e TIPO VEÍCULO.</p>
+        <input type="file" accept=".csv,text/csv" onChange={e => handleImport(e.target.files?.[0])} disabled={importing} />
+      </div>
 
       <div className="card">
         <div className="card-title">{editingId ? 'Editar veículo' : 'Novo veículo'}</div>
@@ -431,6 +551,8 @@ function DocumentsPage({ documents, vehicles, reload }) {
   const [busca, setBusca] = useState('')
   const [msg, setMsg] = useState({ text: '', type: '' })
   const [placaFiltro, setPlacaFiltro] = useState('')
+  const [importing, setImporting] = useState(false)
+  const [uploadingPdf, setUploadingPdf] = useState(false)
 
   const filtrados = useMemo(() => documents.filter(d => {
     const textoOk = [d.titulo, d.tipo, d.classificacao, d.seguro, d.cliente, d.seguradora, d.numero, d.lmg]
@@ -490,10 +612,79 @@ function DocumentsPage({ documents, vehicles, reload }) {
     reload()
   }
 
+  async function handleImport(file) {
+    if (!file) return
+    setImporting(true)
+    setMsg({ text: '', type: '' })
+
+    try {
+      const text = await readTextFile(file)
+      const rows = parseCsv(text)
+      const payload = rows.map(r => ({
+        titulo: String(r.titulo || r.TITULO || '').trim(),
+        tipo: String(r.tipo || r.TIPO || 'Apólice').trim(),
+        classificacao: String(r.classificacao || r.CLASSIFICACAO || 'Principal').trim(),
+        seguro: String(r.seguro || r.SEGURO || 'SHLOG').trim(),
+        cliente: String(r.cliente || r.CLIENTE || '').trim(),
+        seguradora: String(r.seguradora || r.SEGURADORA || '').trim(),
+        corretora: String(r.corretora || r.CORRETORA || '').trim(),
+        numero: String(r.numero || r.NUMERO || '').trim(),
+        lmg: String(r.lmg || r.LMG || '').trim(),
+        inicio_vigencia: String(r.inicio_vigencia || r.INICIO_VIGENCIA || '').trim(),
+        fim_vigencia: String(r.fim_vigencia || r.FIM_VIGENCIA || '').trim(),
+        origem: String(r.origem || r.ORIGEM || 'Importação').trim(),
+        arquivo_url: String(r.arquivo_url || r.ARQUIVO_URL || '').trim(),
+        observacoes: String(r.observacoes || r.OBSERVACOES || '').trim()
+      })).filter(d => d.titulo)
+
+      if (!payload.length) throw new Error('Nenhum registro válido encontrado no CSV de documentos.')
+      const { error } = await supabase.from('documentos').insert(payload)
+      if (error) throw error
+      setMsg({ text: `${payload.length} documentos importados.`, type: 'success' })
+      reload()
+    } catch (error) {
+      setMsg({ text: error.message || 'Falha ao importar documentos.', type: 'error' })
+    } finally {
+      setImporting(false)
+    }
+  }
+
+  async function handlePdfUpload(file) {
+    if (!file) return
+    setUploadingPdf(true)
+    setMsg({ text: '', type: '' })
+    try {
+      const url = await uploadPdfToSupabase(file)
+      setForm(prev => ({
+        ...prev,
+        origem: 'PDF',
+        arquivo_url: url,
+        titulo: prev.titulo || file.name.replace(/\.pdf$/i, '')
+      }))
+      setMsg({ text: 'PDF enviado. Agora finalize os demais campos e salve.', type: 'success' })
+    } catch (error) {
+      setMsg({ text: error.message || 'Falha ao enviar PDF.', type: 'error' })
+    } finally {
+      setUploadingPdf(false)
+    }
+  }
+
   return (
     <>
       <h2 className="section-title">Apólices e DDRs</h2>
       {msg.text && <div className={msg.type}>{msg.text}</div>}
+
+      <div className="card">
+        <div className="card-title">Importação de apólices e DDRs</div>
+        <p className="helper">CSV com colunas: titulo, tipo, classificacao, seguro, cliente, seguradora, corretora, numero, lmg, inicio_vigencia, fim_vigencia, origem, arquivo_url, observacoes.</p>
+        <input type="file" accept=".csv,text/csv" onChange={e => handleImport(e.target.files?.[0])} disabled={importing} />
+      </div>
+
+      <div className="card">
+        <div className="card-title">Cadastro manual ou por PDF</div>
+        <div className="helper">Você pode preencher manualmente ou subir um PDF para gravar a URL no cadastro.</div>
+        <input type="file" accept="application/pdf,.pdf" onChange={e => handlePdfUpload(e.target.files?.[0])} disabled={uploadingPdf} />
+      </div>
 
       <div className="card">
         <div className="card-title">{editingId ? 'Editar documento' : 'Novo documento'}</div>
@@ -511,7 +702,7 @@ function DocumentsPage({ documents, vehicles, reload }) {
             <input type="date" value={form.inicio_vigencia} onChange={e => setForm({ ...form, inicio_vigencia: e.target.value })} />
             <input type="date" value={form.fim_vigencia} onChange={e => setForm({ ...form, fim_vigencia: e.target.value })} />
             <select value={form.origem} onChange={e => setForm({ ...form, origem: e.target.value })}>{ORIGENS.map(v => <option key={v}>{v}</option>)}</select>
-            <input className="full-span" placeholder="URL do PDF (quando origem = PDF)" value={form.arquivo_url} onChange={e => setForm({ ...form, arquivo_url: e.target.value })} />
+            <input className="full-span" placeholder="URL do PDF" value={form.arquivo_url} onChange={e => setForm({ ...form, arquivo_url: e.target.value })} />
             <textarea className="full-span" rows="3" placeholder="Observações / placas / vínculo operacional" value={form.observacoes} onChange={e => setForm({ ...form, observacoes: e.target.value })} />
           </div>
           <div className="actions-row">
