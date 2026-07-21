@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from './supabase.js'
+import logoShlog from './assets/logo-shlog.png'
+import mascoteShlog from './assets/mascote-shlog.png'
 
 const STORAGE_BUCKET = 'documentos-pdf'
 const FORNECEDORES_PADRAO = ['Trucks Control', '3S', 'T4S', 'Autolife', 'Integrard']
@@ -216,8 +218,13 @@ function Login() {
   return (
     <div className="login-container">
       <div className="login-box">
-        <h1>SHLOG Control</h1>
-        <p>{isSignUp ? 'Criar conta de acesso' : 'Acesse sua conta'}</p>
+        <div className="login-brand">
+          <img src={logoShlog} alt="SHLOG" className="login-logo" />
+        </div>
+
+        <h1>{isSignUp ? 'Criar conta' : 'Entrar'}</h1>
+        <p>{isSignUp ? 'Cadastre seu acesso' : 'Acesse o sistema'}</p>
+
         <form onSubmit={handleSubmit}>
           <div className="form-field">
             <input type="email" placeholder="E-mail" value={email} onChange={e => setEmail(e.target.value)} required />
@@ -228,6 +235,7 @@ function Login() {
           <button type="submit" className="primary">{isSignUp ? 'Cadastrar' : 'Entrar'}</button>
           {msg.text && <div className={msg.type}>{msg.text}</div>}
         </form>
+
         <div className="login-toggle" onClick={() => setIsSignUp(!isSignUp)}>
           {isSignUp ? 'Já tenho conta — Entrar' : 'Criar nova conta'}
         </div>
@@ -269,10 +277,14 @@ function Dashboard() {
   return (
     <div className="layout">
       <aside>
-        <div className="logo-box">
-          <h2>SHLOG Control</h2>
-          <p>Sistema de Gestão</p>
+        <div className="brand-box">
+          <img src={logoShlog} alt="SHLOG" className="brand-logo" />
+          <div className="brand-text">
+            <h2>SHLOG Control</h2>
+            <p>Painel operacional</p>
+          </div>
         </div>
+
         <nav className="nav">
           <button className={page === 'dashboard' ? 'active' : ''} onClick={() => setPage('dashboard')}>Dashboard</button>
           <button className={page === 'veiculos' ? 'active' : ''} onClick={() => setPage('veiculos')}>Veículos</button>
@@ -288,6 +300,15 @@ function Dashboard() {
         {page === 'veiculos' && <VehiclesPage vehicles={vehicles} reload={loadAll} />}
         {page === 'seguros' && <DocumentsPage documents={documents} vehicles={vehicles} reload={loadAll} />}
         {page === 'tecnologias' && <TechnologiesPage tecnologias={tecnologias} vehicles={vehicles} reload={loadAll} />}
+
+        <button
+          className="help-floating-btn"
+          onClick={() => alert('Central de ajuda em breve')}
+          type="button"
+        >
+          <img src={mascoteShlog} alt="Ajuda SHLOG" className="help-mascote" />
+          <span>Ajuda</span>
+        </button>
       </main>
     </div>
   )
@@ -307,8 +328,8 @@ function DashboardPage({ vehicles, documents, tecnologias }) {
   return (
     <>
       <div className="hero">
-        <h1>SHLOG Control</h1>
-        <p>Gestão separada de frota, apólices/DDRs e tecnologias com controle de manutenção.</p>
+        <h1>Dashboard</h1>
+        <p>Operação em tempo real</p>
       </div>
 
       <div className="grid eight">
@@ -325,7 +346,12 @@ function DashboardPage({ vehicles, documents, tecnologias }) {
       <div className="two-col">
         <div className="card">
           <div className="card-title">Alertas de vencimento</div>
-          {alertas.length === 0 ? <p>Nenhum documento com vencimento em até 60 dias.</p> : (
+          {alertas.length === 0 ? (
+            <div className="empty-state">
+              <img src={mascoteShlog} alt="Mascote SHLOG" className="empty-mascote" />
+              <p>Nenhum documento vencendo em até 60 dias.</p>
+            </div>
+          ) : (
             <table className="table">
               <thead>
                 <tr>
@@ -355,14 +381,13 @@ function DashboardPage({ vehicles, documents, tecnologias }) {
         </div>
 
         <div className="card">
-          <div className="card-title">Regras aplicadas</div>
-          <ul className="bullet-list">
-            <li>Importação e cadastro manual de veículos.</li>
-            <li>Importação, cadastro manual e PDF para Apólices e DDRs.</li>
-            <li>Campos principais de documentos: vigência, LMG e flag SHLOG/Cliente.</li>
-            <li>Tecnologias controlam manutenção por veículo e fornecedor.</li>
-            <li>Fornecedor Trucks Control libera itens específicos.</li>
-          </ul>
+          <div className="card-title">Ações rápidas</div>
+          <div className="bullet-list">
+            <p>• Cadastre ou importe veículos por CSV.</p>
+            <p>• Cadastre apólices, DDRs e envie PDF.</p>
+            <p>• Controle tecnologias e manutenção por veículo.</p>
+            <p>• Use o botão de ajuda para suporte rápido.</p>
+          </div>
         </div>
       </div>
     </>
@@ -478,7 +503,7 @@ function VehiclesPage({ vehicles, reload }) {
 
       <div className="card">
         <div className="card-title">Importação de veículos</div>
-        <p className="helper">CSV com colunas: placa, tipo, marca, modelo, ano, bau_cofre, status. Também aceita cabeçalhos em maiúsculo, como PLACA e TIPO VEÍCULO.</p>
+        <p className="helper">CSV com colunas: placa, tipo, marca, modelo, ano, bau_cofre, status.</p>
         <input type="file" accept=".csv,text/csv" onChange={e => handleImport(e.target.files?.[0])} disabled={importing} />
       </div>
 
@@ -659,7 +684,7 @@ function DocumentsPage({ documents, vehicles, reload }) {
         ...prev,
         origem: 'PDF',
         arquivo_url: url,
-        titulo: prev.titulo || file.name.replace(/\.pdf$/i, '')
+        titulo: prev.titulo || file.name.replace(/\\.pdf$/i, '')
       }))
       setMsg({ text: 'PDF enviado. Agora finalize os demais campos e salve.', type: 'success' })
     } catch (error) {
